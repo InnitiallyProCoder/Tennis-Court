@@ -5,6 +5,7 @@ import QRCode from 'qrcode';
 import {api} from '../services/api';
 
 import {useGuest,Action,State,Empty,money,time,hourLabel,dateToday,requestId} from './context';
+import {buildReceipt,ReceiptCard,PrintReceiptButton,fullStamp} from './Receipt';
 import {labels, formatStaffSummary} from '../utils/format';
 import './profile.css';
 import { useTierPolicy, fmtDiscount, fmtMultiplier, fmtMoney, fmtDate } from '../utils/tierPolicy';
@@ -1079,7 +1080,7 @@ export function ExtendCourtDialog({order, onClose}) {
 
 export function Orders({history=false}){
 
-  const {t,data,pay,refresh,navigate,setMoveOrder,setDate,show}=useGuest();
+  const {t,data,pay,refresh,navigate,setMoveOrder,setDate,show,user,club,notify}=useGuest();
 
   const [filter,setFilter]=useState(history ? 'HISTORY' : 'ALL'),[page,setPage]=useState(0);
 
@@ -1456,6 +1457,32 @@ export function Orders({history=false}){
                 )}
 
               </div>
+
+              {/* Biên lai thanh toán: lưu vĩnh viễn trong đơn để khách in / đối chiếu bất cứ lúc nào */}
+
+              {(()=>{
+                const receipts=(data?.payments||[]).filter(p=>p.orderId===o.id).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')));
+                if(!receipts.length)return null;
+                return (
+                  <details style={{marginBottom:14,background:'#fbfcf8',border:'1px solid #e2ebd9',borderRadius:8,padding:'10px 14px'}}>
+                    <summary style={{cursor:'pointer',fontWeight:700,fontSize:13,color:'#173c32'}}>🧾 {t('Biên lai thanh toán')} ({receipts.length})</summary>
+                    <div style={{display:'grid',gap:12,marginTop:10}}>
+                      {receipts.map(p=>{
+                        const r=buildReceipt({payment:p,order:o,data,user,club});
+                        return (
+                          <div key={p.id}>
+                            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,flexWrap:'wrap',marginBottom:6,fontSize:12,color:'#52655a'}}>
+                              <span><b>{money(p.amount)}</b> · {fullStamp(p.createdAt)}</span>
+                              <PrintReceiptButton receipt={r} t={t} notify={notify} label={t('In / Tải PDF')} style={{padding:'5px 12px',fontSize:12}}/>
+                            </div>
+                            <ReceiptCard receipt={r} t={t}/>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </details>
+                );
+              })()}
 
 
 

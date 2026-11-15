@@ -29,6 +29,10 @@ public class TransferService {
   private final PaymentService payments;
   private final OrderService booking;
   private final DemoAccessPolicy demo;
+  // Gửi biên lai điện tử qua email/in-app khi ngân hàng xác nhận tiền về (inject lười để giữ constructor cũ)
+  @org.springframework.beans.factory.annotation.Autowired(required = false)
+  @org.springframework.context.annotation.Lazy
+  private NotificationService notifications;
 
   @Value("${courtly.payment.mode:MANUAL}")
   private String mode;
@@ -320,6 +324,9 @@ public class TransferService {
               event));
       x.put("received", PresentationService.decimal(x.get("received")).add(received));
       x.put("remaining", PresentationService.decimal(x.get("remaining")).subtract(received));
+      // Mốc thời gian hệ thống ghi nhận tiền vào — dùng làm căn cứ đối soát trên biên lai
+      x.put("paidAt", Instant.now().toString());
+      x.put("bankTransactionCode", event);
       x.put(
           "status",
           PresentationService.decimal(x.get("remaining")).signum() == 0
@@ -342,6 +349,59 @@ public class TransferService {
     record.put("intentId", x.get("id"));
     docs.put("bank-event:" + event, record);
     docs.put("transfer:" + x.get("id"), x);
+    if (valid) sendReceipt(x, event, received);
+  }
+
+  /** Email + thông báo in-app biên lai thanh toán. Lỗi gửi không được làm hỏng giao dịch đã ghi nhận. */
+  private void sendReceipt(Map<String, Object> x, String event, BigDecimal received) {
+    if (notifications == null || x.get("accountId") == null) return;
+    try {
+      UUID accountId = UUID.fromString(String.valueOf(x.get("accountId")));
+      var account = accounts.findById(accountId).orElse(null);
+      if (account == null) return;
+      var zone = ZoneId.of("Asia/Ho_Chi_Minh");
+      String paidAt = java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss")
+          .format(Instant.parse(String.valueOf(x.get("paidAt"))).atZone(zone));
+      UUID orderId = null;
+      String target = String.valueOf(x.get("targetId"));
+      String code;
+      String purpose;
+      if ("ORDER".equals(x.get("type"))) {
+        orderId = UUID.fromString(target);
+        code = "CT-" + target.substring(0, 8).toUpperCase(Locale.ROOT);
+        purpose = "Thanh toán đơn đặt sân " + code;
+      } else {
+        code = "GD-" + target.substring(0, 8).toUpperCase(Locale.ROOT);
+        purpose = "Lệ phí đăng ký giải đấu " + code;
+      }
+      String amount = String.format(Locale.GERMANY, "%,.0f₫", received);
+      String remaining = String.format(Locale.GERMANY, "%,.0f₫", PresentationService.decimal(x.get("remaining")).max(BigDecimal.ZERO));
+      String row = "<tr><td style=\"padding:6px 12px;color:#666\">%s</td><td style=\"padding:6px 12px;font-weight:600\">%s</td></tr>";
+      String html =
+          "<div style=\"font-family:Arial,sans-serif;max-width:560px\">"
+              + "<h2 style=\"color:#173c32;margin:0 0 4px\">Biên lai thanh toán</h2>"
+              + "<p style=\"color:#555;margin:0 0 14px\">" + getAccountName() + " · Courtly Tennis Club</p>"
+              + "<table style=\"border-collapse:collapse;border:1px solid #d2dec8;width:100%\">"
+              + String.format(row, "Số biên lai", x.get("reference"))
+              + String.format(row, "Mã giao dịch ngân hàng", event)
+              + String.format(row, "Thời gian ghi nhận", paidAt)
+              + String.format(row, "Người thanh toán", account.getFullName())
+              + String.format(row, "Diễn giải", purpose)
+              + String.format(row, "Hình thức", "Chuyển khoản VietQR (Napas 247)")
+              + String.format(row, "Số tiền đã thu", amount)
+              + String.format(row, "Còn phải thanh toán", remaining)
+              + "</table>"
+              + "<p style=\"color:#777;font-size:12px\">Biên lai điện tử được lưu tại mục Đơn của tôi → Biên lai thanh toán. Vui lòng giữ email này để đối chiếu khi cần.</p>"
+              + "</div>";
+      String dedupe = "PAYMENT_RECEIPT:" + event;
+      if (account.getEmail() != null && !account.getEmail().isBlank())
+        notifications.enqueue(accountId, orderId, null, "PAYMENT_RECEIPT", "EMAIL", account.getEmail(),
+            "[Courtly] Biên lai thanh toán " + x.get("reference") + " – " + amount, html, Instant.now(), dedupe + ":EMAIL");
+      notifications.enqueue(accountId, orderId, null, "PAYMENT_RECEIPT", "IN_APP", null,
+          "🧾 Đã nhận " + amount, purpose + " · " + paidAt + " · Mã GD " + x.get("reference"), Instant.now(), dedupe + ":IN_APP");
+    } catch (Exception ignored) {
+      // Biên lai vẫn xem lại được trong Đơn của tôi
+    }
   }
 
 

@@ -5,7 +5,7 @@ import { Title, Panel, Button, Modal, Table } from '../components/UI';
 import { Stars } from './InformationPage';
 import { 
   AlertTriangle, CheckCircle2, Clock, Gift, User, 
-  MessageSquare, ShieldAlert, Sparkles, ChevronRight, X 
+  MessageSquare, ShieldAlert, Sparkles, ChevronRight, X, Undo2 
 } from 'lucide-react';
 
 const articleEmpty = {
@@ -77,6 +77,42 @@ export default function ContentAdminPage() {
     return `${main}${min}, hiệu lực ${Number(c.days || 0)} ngày`;
   };
   const [internalResolution, setInternalResolution] = useState('');
+  // Hoàn tiền thiện chí từ ca feedback (chỉ Manager thực hiện)
+  const [refundInfo, setRefundInfo] = useState(null);
+  const [refundForm, setRefundForm] = useState({ amount: '', reason: '' });
+  const [refundBusy, setRefundBusy] = useState(false);
+  const money = v => `${Number(v || 0).toLocaleString('vi-VN')}₫`;
+  useEffect(() => {
+    setRefundInfo(null);
+    setRefundForm({ amount: '', reason: '' });
+    if (!review?.id || !review.orderId) return;
+    let alive = true;
+    api(`/content/feedback/${review.id}/refund`)
+      .then(info => { if (alive) setRefundInfo(info); })
+      .catch(e => { if (alive) setRefundInfo({ error: e.message }); });
+    return () => { alive = false; };
+  }, [review?.id]);
+  const handleRefund = async () => {
+    const amount = Number(refundForm.amount);
+    const reason = refundForm.reason.trim();
+    if (!(amount > 0) || !Number.isInteger(amount)) return notify('Nhập số tiền hoàn (số nguyên ₫) lớn hơn 0.');
+    if (refundInfo && amount > Number(refundInfo.refundable || 0)) return notify(`Chỉ có thể hoàn tối đa ${money(refundInfo.refundable)}.`);
+    if (reason.length < 10) return notify('Lý do hoàn tiền cần ít nhất 10 ký tự.');
+    if (!window.confirm(`Hoàn ${money(amount)} cho khách từ đơn CT-${review.orderId.slice(0, 8).toUpperCase()}? Thao tác ghi vào sổ thu chi và không thể hoàn tác.`)) return;
+    setRefundBusy(true);
+    try {
+      const res = await api(`/content/feedback/${review.id}/refund`, 'POST', { amount, reason });
+      notify(`Đã hoàn ${money(res.refunded)} cho khách hàng.`);
+      setRefundInfo(info => ({ ...info, refundable: res.refundable, refundedTotal: res.refundedTotal, refunds: res.refunds }));
+      setReview(prev => ({ ...prev, refundedTotal: res.refundedTotal, refunds: res.refunds }));
+      setRefundForm({ amount: '', reason: '' });
+      load();
+    } catch (e) {
+      notify('Lỗi hoàn tiền: ' + e.message);
+    } finally {
+      setRefundBusy(false);
+    }
+  };
   const [rootCause, setRootCause] = useState('Mặt sân');
 
   const load = async () => {
@@ -335,6 +371,11 @@ export default function ContentAdminPage() {
                         {f.compensationVoucherCode && (
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#ecfdf5', color: '#065f46', padding: '2px 6px', borderRadius: 4, fontSize: 11, marginTop: 4 }}>
                             🎁 Đã bù: {f.compensationVoucherCode}
+                          </span>
+                        )}
+                        {Number(f.refundedTotal) > 0 && (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, background: '#eff6ff', color: '#1e40af', padding: '2px 6px', borderRadius: 4, fontSize: 11, marginTop: 4, marginLeft: 4 }}>
+                            💸 Đã hoàn: {Number(f.refundedTotal).toLocaleString('vi-VN')}₫
                           </span>
                         )}
                       </td>
@@ -609,6 +650,74 @@ export default function ContentAdminPage() {
                 ) : (
                   <div style={{ fontSize: 12, color: '#64748b' }}>
                     Khách hàng đã nhận được mã bồi thường qua Email/thông báo và mục "Ưu đãi của tôi".
+                  </div>
+                )}
+              </div>
+
+              {/* Refund Section */}
+              <div style={{ marginTop: 12, background: '#fff', padding: 12, borderRadius: 6, border: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#0f172a', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <Undo2 size={15} /> Hoàn tiền cho khách:
+                  </span>
+                  {Number(refundInfo?.refundedTotal || review.refundedTotal) > 0 && (
+                    <span style={{ background: '#eff6ff', color: '#1e40af', padding: '3px 8px', borderRadius: 4, fontSize: 12, fontWeight: 700 }}>
+                      Đã hoàn {money(refundInfo?.refundedTotal || review.refundedTotal)}
+                    </span>
+                  )}
+                </div>
+                {!review.orderId ? (
+                  <div style={{ fontSize: 12, color: '#64748b' }}>Góp ý chung không gắn với đơn nên không thể hoàn tiền. Có thể tặng voucher xin lỗi thay thế.</div>
+                ) : !refundInfo ? (
+                  <div style={{ fontSize: 12, color: '#64748b' }}>Đang tải thông tin thanh toán của đơn…</div>
+                ) : refundInfo.error ? (
+                  <div style={{ fontSize: 12, color: '#991b1b' }}>Không tải được thông tin thanh toán: {refundInfo.error}</div>
+                ) : (
+                  <div>
+                    <div style={{ fontSize: 12, color: '#475569', marginBottom: 8 }}>
+                      Khách đã trả <b>{money(refundInfo.paid)}</b> · Còn có thể hoàn <b>{money(refundInfo.refundable)}</b>
+                    </div>
+                    {Array.isArray(refundInfo.refunds) && refundInfo.refunds.length > 0 && (
+                      <ul style={{ margin: '0 0 8px', paddingLeft: 18, fontSize: 12, color: '#475569' }}>
+                        {refundInfo.refunds.map((r, i) => (
+                          <li key={i}>{money(r.amount)} — {r.reason} <span style={{ color: '#94a3b8' }}>({r.by}{r.at ? `, ${new Date(r.at).toLocaleString('vi-VN')}` : ''})</span></li>
+                        ))}
+                      </ul>
+                    )}
+                    {!isAdmin ? (
+                      <div style={{ fontSize: 12, color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '6px 10px' }}>
+                        Hoàn tiền thiện chí nằm ngoài chính sách hủy nên cần Manager thực hiện. Ghi đề xuất vào ghi chú nội bộ để Manager duyệt.
+                      </div>
+                    ) : Number(refundInfo.refundable) <= 0 ? (
+                      <div style={{ fontSize: 12, color: '#64748b' }}>Đơn không còn khoản đã thu nào để hoàn.</div>
+                    ) : (
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8, fontSize: 12, alignItems: 'end' }}>
+                        <label style={{ display: 'grid', gap: 3 }}>
+                          Số tiền hoàn (₫)
+                          <input type="number" min="1" step="1000" max={Math.floor(Number(refundInfo.refundable))} value={refundForm.amount} placeholder={`Tối đa ${money(refundInfo.refundable)}`} onChange={e => setRefundForm(f => ({ ...f, amount: e.target.value }))} style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid #cbd5e1' }} />
+                        </label>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {[0.2, 0.5, 1].map(ratio => {
+                            const max = Math.floor(Number(refundInfo.refundable));
+                            const v = ratio === 1 ? max : (Math.floor(max * ratio / 1000) * 1000 || Math.floor(max * ratio));
+                            return (
+                              <button key={ratio} type="button" onClick={() => setRefundForm(f => ({ ...f, amount: String(v) }))} style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#fff', fontSize: 11.5, fontWeight: 600, cursor: 'pointer' }}>
+                                {ratio === 1 ? 'Toàn bộ' : `${ratio * 100}%`}
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <label style={{ display: 'grid', gap: 3, gridColumn: '1 / -1' }}>
+                          Lý do hoàn (bắt buộc, ≥ 10 ký tự — ghi vào sổ thu chi & nhật ký)
+                          <input type="text" maxLength={200} value={refundForm.reason} placeholder="VD: Đèn sân B04 hỏng 30 phút, hoàn 50% tiền giờ bị ảnh hưởng" onChange={e => setRefundForm(f => ({ ...f, reason: e.target.value }))} style={{ padding: '5px 8px', borderRadius: 6, border: '1px solid #cbd5e1' }} />
+                        </label>
+                        <div style={{ gridColumn: '1 / -1' }}>
+                          <Button onClick={handleRefund} disabled={refundBusy} style={{ background: '#1d4ed8', color: '#fff', fontSize: 12, padding: '6px 14px' }}>
+                            <Undo2 size={14} /> {refundBusy ? 'Đang hoàn…' : 'Hoàn tiền'}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

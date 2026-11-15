@@ -3,6 +3,7 @@ import QRCode from 'qrcode';
 import {Copy,CheckCircle2,ArrowRight} from 'lucide-react';
 import {api} from '../services/api';
 import {useGuest,Action,State,Empty,money} from './context';
+import {buildReceipt,ReceiptCard,PrintReceiptButton} from './Receipt';
 
 function PaymentCountdown({ expiresAt, t }) {
   const [sec, setSec] = useState(() => {
@@ -50,7 +51,7 @@ function PaymentCountdown({ expiresAt, t }) {
 }
 
 export function PaymentDialog({intent,onClose}){
-  const {t,refresh,notify,navigate}=useGuest();
+  const {t,refresh,notify,navigate,data,user,club}=useGuest();
   const lastStatus=useRef(intent.status);
   const [current,setCurrent]=useState(intent);
   const [qr,setQr]=useState('');
@@ -130,31 +131,26 @@ export function PaymentDialog({intent,onClose}){
           {t('KHOẢN CHUYỂN ĐÃ XÁC MINH')}
         </h2>
         <p style={{fontSize:13,color:'#555',margin:'0 auto 20px auto',maxWidth:380}}>
-          {t('Khoản chuyển đã được xác minh. Xem đơn để biết số dư còn lại và trạng thái lịch đặt.')}
+          {t('Khoản chuyển đã được xác minh. Dưới đây là biên lai điện tử của giao dịch, vui lòng lưu lại để đối chiếu khi cần.')}
         </p>
 
-        <div style={{background:'#f0f4ec',border:'1px solid #d2dec8',borderRadius:6,padding:'14px 18px',marginBottom:22,textAlign:'left',fontSize:13}}>
-          <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
-            <span style={{color:'#666'}}>{t('Mã giao dịch')}:</span>
-            <b>{current.reference}</b>
-          </div>
-          <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
-            <span style={{color:'#666'}}>{t('Số tiền đã thu')}:</span>
-            <b style={{color:'#2e7d32',fontSize:15}}>{money(current.received||current.amount)}</b>
-          </div>
-          <div style={{display:'flex',justifyContent:'space-between',marginBottom:8}}>
-            <span style={{color:'#666'}}>{t('Hình thức')}:</span>
-            <span>Chuyển khoản VietQR (Napas 247)</span>
-          </div>
-          <div style={{display:'flex',justifyContent:'space-between'}}>
-            <span style={{color:'#666'}}>{t('Trạng thái giao dịch')}:</span>
-            <State value={current.status}/>
-          </div>
-        </div>
-
+        {(()=>{
+          const order=current.type==='ORDER'?(data?.orders||[]).find(o=>o.id===current.targetId):null;
+          const receipt=buildReceipt({transfer:current,order,data,user,club});
+          return <>
+            <div style={{marginBottom:12}}><ReceiptCard receipt={receipt} t={t}/></div>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',fontSize:12,color:'#52655a',marginBottom:18,gap:10,flexWrap:'wrap'}}>
+              <span>{t('Trạng thái giao dịch')}: <State value={current.status}/></span>
+              <span>📧 {t('Biên lai đã gửi tới email và lưu trong Đơn của tôi')}</span>
+            </div>
+            <div style={{display:'flex',gap:10,justifyContent:'center',flexWrap:'wrap'}}>
+              <PrintReceiptButton receipt={receipt} t={t} notify={notify} style={{padding:'12px 20px'}}/>
         <Action onClick={()=>{onClose();if(navigate)navigate('orders');}}>
           {t('Xem đơn hàng của tôi')} <ArrowRight size={16} style={{display:'inline',verticalAlign:'middle',marginLeft:4}}/>
         </Action>
+            </div>
+          </>;
+        })()}
       </div>
     );
   }
@@ -352,7 +348,7 @@ export function PaymentChoice({onChoose}){
 }
 
 export default function Payments(){
-  const {t,data,transfers,pay}=useGuest();
+  const {t,data,transfers,pay,user,club,notify}=useGuest();
   return (
     <section className="ct-pad">
       <div className="gx-heading">
@@ -386,6 +382,8 @@ export default function Payments(){
             </header>
             <p>{t(p.method)} • {new Date(p.createdAt||p.paidAt).toLocaleString('vi-VN')}</p>
             <p>{t('Mã đơn / Giải')}: {(p.orderId||p.registrationId||p.membershipId)?.slice(0,8)} {p.planName||''}</p>
+            {!p.membershipId&&<PrintReceiptButton t={t} notify={notify} label={t('In biên lai')} style={{padding:'6px 12px',fontSize:12}}
+              receipt={buildReceipt({payment:p,order:(data?.orders||[]).find(o=>o.id===p.orderId),data,user,club})}/>}
           </article>)}
       </div>
     </section>

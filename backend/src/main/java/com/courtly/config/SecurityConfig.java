@@ -55,6 +55,7 @@ public class SecurityConfig {
                     .requestMatchers(HttpMethod.POST, "/api/content/feedback/*/assign").hasAnyRole("ADMIN", "STAFF")
                     .requestMatchers(HttpMethod.POST, "/api/content/feedback/*/resolve").hasAnyRole("ADMIN", "STAFF")
                     .requestMatchers(HttpMethod.POST, "/api/content/feedback/*/compensate").hasAnyRole("ADMIN", "STAFF")
+                    .requestMatchers(HttpMethod.GET, "/api/content/feedback/*/refund").hasAnyRole("ADMIN", "STAFF")
                     // Hoàn tiền: Staff hoàn trong mức chính sách, vượt mức kiểm tra ở PaymentService (chỉ Manager)
                     .requestMatchers(HttpMethod.POST, "/api/payments/*/refunds").hasAnyRole("ADMIN", "STAFF")
                     // Toàn bộ các route quản trị nhạy cảm: chỉ ADMIN

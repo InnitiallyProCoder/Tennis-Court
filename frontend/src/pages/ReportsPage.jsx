@@ -1192,7 +1192,10 @@ export default function ReportsPage() {
                       ? p.label.split('–').map((part, i) => (
                           <tspan key={i} x={xCenter} dy={i ? 11 : 0}>{i ? `–${part}` : part}</tspan>
                         ))
-                      : p.label}
+                      : slotWidth < 100 && /^Tháng \d{1,2}\/\d{4}$/.test(p.label)
+                        // Biểu đồ năm: 12 cột hẹp → bỏ phần năm (đã có ở tiêu đề) để nhãn không dính nhau
+                        ? p.label.replace(/\/\d{4}$/, '')
+                        : p.label}
 
                   </text>
 

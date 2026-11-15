@@ -31,6 +31,12 @@ public class ContentService {
   private final com.courtly.repository.VoucherRepository vouchersRepo;
   private final NotificationService notificationService;
   private final AuditService auditService;
+  @org.springframework.beans.factory.annotation.Autowired
+  @org.springframework.context.annotation.Lazy
+  private PaymentService paymentService;
+  @org.springframework.beans.factory.annotation.Autowired
+  @org.springframework.context.annotation.Lazy
+  private PaymentRepository paymentsRepo;
 
   private String string(Map<String, Object> b, String k, int max, boolean required) {
     Object v = b.getOrDefault(k, "");
@@ -626,5 +632,114 @@ public class ContentService {
     auditService.log("REVOKE_COMPENSATION", "Thu hồi voucher " + code + " cho phản hồi " + id + " lý do: " + reason);
 
     return map("success", true, "revokedCode", code, "message", "Đã thu hồi voucher bồi thường " + code);
+  }
+
+  private UUID feedbackOrderId(Map<String, Object> f) {
+    Object raw = f.get("orderId");
+    require(raw != null && !String.valueOf(raw).isBlank(), "Phản hồi không gắn với đơn nào nên không thể hoàn tiền");
+    try {
+      return UUID.fromString(String.valueOf(raw));
+    } catch (IllegalArgumentException e) {
+      throw new BusinessException("Mã đơn của phản hồi không hợp lệ");
+    }
+  }
+
+  private java.math.BigDecimal feedbackRefunded(Map<String, Object> f) {
+    return PresentationService.decimal(f.get("refundedTotal")).max(java.math.BigDecimal.ZERO);
+  }
+
+  /** Số tiền còn có thể hoàn cho đơn gắn với phản hồi (tổng đã thu trừ các khoản đã hoàn). */
+  @Transactional(readOnly = true)
+  public Map<String, Object> feedbackRefundInfo(String id, Account actor) {
+    if (!Set.of("ADMIN", "STAFF").contains(actor.getRole()))
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Không có quyền");
+    var f = docs.get("feedback:" + id);
+    require(!f.isEmpty(), "Phản hồi không tồn tại");
+    UUID orderId = feedbackOrderId(f);
+    var paid = paymentsRepo.findByOrderId(orderId).stream()
+        .map(com.courtly.entity.Payment::getAmount)
+        .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+    var refundable = paymentsRepo.findByOrderId(orderId).stream()
+        .map(paymentService::net)
+        .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add)
+        .max(java.math.BigDecimal.ZERO);
+    return map(
+        "orderId", orderId,
+        "paid", paid,
+        "refundable", refundable,
+        "refundedTotal", feedbackRefunded(f),
+        "refunds", f.getOrDefault("refunds", List.of()),
+        "canRefund", "ADMIN".equals(actor.getRole()));
+  }
+
+  /**
+   * Hoàn tiền thiện chí cho khách từ ca xử lý feedback. Đây là khoản hoàn ngoài chính sách hủy nên
+   * chỉ Manager được thực hiện; tiền được trừ lần lượt trên các giao dịch đã thu của đơn.
+   */
+  public Map<String, Object> refundFeedback(String id, Map<String, Object> body, Account actor) {
+    if (!"ADMIN".equals(actor.getRole()))
+      throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Hoàn tiền thiện chí từ feedback cần Manager thực hiện");
+    require(body != null, "Thiếu thông tin hoàn tiền");
+    java.math.BigDecimal amount = PresentationService.decimal(body.get("amount"));
+    require(amount.signum() > 0, "Số tiền hoàn phải lớn hơn 0");
+    require(amount.stripTrailingZeros().scale() <= 0, "Số tiền hoàn phải là số nguyên (₫)");
+    String reason = body.get("reason") == null ? "" : String.valueOf(body.get("reason")).trim();
+    require(reason.length() >= 10, "Lý do hoàn tiền cần ít nhất 10 ký tự");
+    require(reason.length() <= 200, "Lý do hoàn tiền tối đa 200 ký tự");
+
+    var docRow = docs.lock("feedback:" + id);
+    require(docRow != null, "Phản hồi không tồn tại");
+    var f = docs.read(docRow);
+    UUID orderId = feedbackOrderId(f);
+    CustomerOrder order = orders.findById(orderId).orElseThrow(() -> new BusinessException("Không tìm thấy đơn liên quan"));
+
+    var candidates = new ArrayList<com.courtly.entity.Payment>(paymentsRepo.findByOrderId(orderId));
+    candidates.sort(Comparator.comparing(com.courtly.entity.Payment::getPaidAt,
+        Comparator.nullsFirst(Comparator.naturalOrder())).reversed());
+    java.math.BigDecimal refundable = candidates.stream()
+        .map(paymentService::net)
+        .reduce(java.math.BigDecimal.ZERO, java.math.BigDecimal::add);
+    require(refundable.signum() > 0, "Đơn này chưa có khoản đã thu nào để hoàn");
+    require(amount.compareTo(refundable) <= 0,
+        "Chỉ có thể hoàn tối đa " + String.format(Locale.GERMANY, "%,.0f₫", refundable) + " (số tiền khách đã trả còn lại)");
+
+    String refundReason = "Hoàn thiện chí (feedback): " + reason;
+    if (refundReason.length() > 255) refundReason = refundReason.substring(0, 255);
+    java.math.BigDecimal remaining = amount;
+    var refundIds = new ArrayList<String>();
+    for (var p : candidates) {
+      if (remaining.signum() <= 0) break;
+      java.math.BigDecimal net = paymentService.net(p);
+      if (net.signum() <= 0) continue;
+      java.math.BigDecimal part = net.min(remaining);
+      refundIds.add(paymentService.refund(p.getId(), new com.courtly.dto.request.RefundRequest(part, refundReason), actor).toString());
+      remaining = remaining.subtract(part);
+    }
+
+    @SuppressWarnings("unchecked")
+    var history = new ArrayList<Object>(f.get("refunds") instanceof List<?> l ? (List<Object>) l : List.of());
+    history.add(map(
+        "amount", amount,
+        "reason", reason,
+        "by", actor.getFullName(),
+        "at", Instant.now().toString(),
+        "refundIds", refundIds));
+    f.put("refunds", history);
+    f.put("refundedTotal", feedbackRefunded(f).add(amount));
+    docs.save(docRow, f);
+
+    Account customer = order.getCustomerAccount();
+    UUID accountId = customer != null ? customer.getId() : null;
+    String email = customer != null ? customer.getEmail() : null;
+    String phone = customer != null ? customer.getPhone() : null;
+    try {
+      notificationService.notifyRefundDone(orderId, accountId, phone, email, amount.longValue());
+    } catch (Exception ignored) {}
+
+    auditService.log("REFUND_FEEDBACK", "Hoàn " + amount.toPlainString() + "₫ cho đơn " + orderId
+        + " từ feedback " + id + " bởi Manager " + actor.getFullName() + ": " + reason);
+
+    return map("refunded", amount, "refundedTotal", f.get("refundedTotal"),
+        "refundable", refundable.subtract(amount), "refunds", history);
   }
 }
