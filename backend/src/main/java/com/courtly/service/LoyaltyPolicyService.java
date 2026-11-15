@@ -247,12 +247,15 @@ public class LoyaltyPolicyService {
     // So với chính sách đang hiệu lực để ghi nhật ký
     Map<String, Map<String, Object>> base = effective();
     List<String> changesList = new ArrayList<>();
+    Map<String, List<String>> perTier = new LinkedHashMap<>();
     for (String code : TIERS) {
       for (String f : FIELDS.keySet()) {
         double a = ((Number) base.get(code).get(f)).doubleValue();
         double b = ((Number) next.get(code).get(f)).doubleValue();
         if (Math.abs(a - b) > 1e-9) {
-          changesList.add(NAMES.get(code) + " · " + FIELDS.get(f) + ": " + fmt(f, base.get(code).get(f)) + " → " + fmt(f, next.get(code).get(f)));
+          String line = FIELDS.get(f) + ": " + fmt(f, base.get(code).get(f)) + " → " + fmt(f, next.get(code).get(f));
+          changesList.add(NAMES.get(code) + " · " + line);
+          perTier.computeIfAbsent(code, k -> new ArrayList<>()).add(line);
         }
       }
     }
@@ -277,7 +280,7 @@ public class LoyaltyPolicyService {
 
     String when = from.format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
     audit.log("LOYALTY_POLICY_SCHEDULE", "Lên lịch chính sách hạng mới hiệu lực từ " + when + ": " + String.join("; ", changesList));
-    notifyCustomers(when, from.toString());
+    notifyCustomers(when, from.toString(), perTier);
     return adminView();
   }
 
@@ -310,14 +313,33 @@ public class LoyaltyPolicyService {
   }
 
   /** Báo trước cho khách qua chuông thông báo (không gửi email hàng loạt). */
-  private void notifyCustomers(String when, String effectiveFrom) {
-    String body = "Courtly cập nhật quyền lợi hạng thành viên, áp dụng từ " + when
-        + ". Hạng hiện tại của bạn được giữ tới kỳ xét hạng. Xem chi tiết ở trang Hạng thành viên.";
+  private void notifyCustomers(String when, String effectiveFrom, Map<String, List<String>> perTier) {
     for (Account a : accounts.findAll()) {
       if (!"CUSTOMER".equalsIgnoreCase(a.getRole()) || !"ACTIVE".equalsIgnoreCase(a.getStatus())) continue;
+      String body = policyChangeBody(a.getTier(), when, perTier);
       notifications.enqueue(a.getId(), null, null, "LOYALTY_POLICY", "IN_APP", null,
           "📣 Cập nhật quyền lợi hạng thành viên", body, Instant.now(), "LOYALTY_POLICY:" + effectiveFrom + ":" + a.getId() + ":" + System.currentTimeMillis());
     }
+  }
+
+  /** Nội dung thông báo: thay đổi của hạng khách đang giữ trước, sau đó tới các hạng khác. */
+  static String policyChangeBody(String rawTier, String when, Map<String, List<String>> perTier) {
+    String mine = TIERS.contains(rawTier) ? rawTier : "ROOKIE";
+    StringBuilder b = new StringBuilder("Chính sách hạng thành viên mới áp dụng từ " + when + ".\n");
+    List<String> own = perTier.get(mine);
+    if (own != null && !own.isEmpty()) {
+      b.append("Hạng của bạn (").append(NAMES.get(mine)).append("):\n");
+      own.forEach(l -> b.append("• ").append(l).append("\n"));
+    } else {
+      b.append("Quyền lợi hạng ").append(NAMES.get(mine)).append(" của bạn không đổi.\n");
+    }
+    for (String code : TIERS) {
+      if (code.equals(mine) || !perTier.containsKey(code)) continue;
+      b.append("Hạng ").append(NAMES.get(code)).append(":\n");
+      perTier.get(code).forEach(l -> b.append("• ").append(l).append("\n"));
+    }
+    b.append("Hạng hiện tại của bạn được giữ tới kỳ xét hạng.");
+    return b.toString();
   }
 
   /** Dữ liệu demo: trở về chính sách mặc định. */

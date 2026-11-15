@@ -96,11 +96,25 @@ export default function MyLoyalty() {
     multiplier: fmtMultiplier(rule.multiplier),
     target: baseMeta.next ? policyTiers[baseMeta.next].spend : rule.spend
   };
-  const pendingRule = pendingPolicy?.tiers?.[currentTier];
-  const pendingNextSpend = baseMeta.next ? pendingPolicy?.tiers?.[baseMeta.next]?.spend : null;
   // Chỉ báo khi quyền lợi hạng của khách hoặc ngưỡng lên hạng kế tiếp thực sự thay đổi
-  const pendingChanged = Boolean(pendingRule) && (['discount', 'multiplier', 'advanceDays', 'changes', 'birthday'].some(k => Number(pendingRule[k]) !== Number(rule[k]))
-    || (pendingNextSpend != null && Number(pendingNextSpend) !== Number(meta.target)));
+  // Bảng thay đổi chi tiết của chính sách sắp hiệu lực: hạng của khách lên đầu
+  const POLICY_FIELDS = [
+    ['spend', isEn ? '12-month spend' : 'Chi tiêu 12 tháng', v => money(v)],
+    ['discount', isEn ? 'Court fee discount' : 'Giảm giá tiền sân', v => `${String(v).replace('.', ',')}%`],
+    ['multiplier', isEn ? 'Points multiplier' : 'Hệ số tích điểm', v => fmtMultiplier(v)],
+    ['advanceDays', isEn ? 'Book ahead' : 'Đặt trước', v => isEn ? `${v} days` : `${v} ngày`],
+    ['changes', isEn ? 'Free reschedules/month' : 'Đổi lịch miễn phí/tháng', v => String(v)],
+    ['birthday', isEn ? 'Birthday voucher' : 'Voucher sinh nhật', v => money(v)]
+  ];
+  const policyDiff = pendingPolicy?.tiers ? Object.keys(TIER_NAMES)
+    .map(code => ({
+      code,
+      rows: POLICY_FIELDS.filter(([k]) => policyTiers?.[code] && pendingPolicy.tiers[code] && Number(policyTiers[code][k]) !== Number(pendingPolicy.tiers[code][k]))
+        .map(([k, label, f]) => ({ label, from: f(policyTiers[code][k]), to: f(pendingPolicy.tiers[code][k]), up: Number(pendingPolicy.tiers[code][k]) > Number(policyTiers[code][k]) }))
+    }))
+    .filter(x => x.rows.length)
+    .sort((a, b) => (b.code === currentTier) - (a.code === currentTier)) : [];
+  const pendingChanged = policyDiff.length > 0;
   const spend = data.spend12m != null ? data.spend12m : (data.spend12Month || 0);
   const nextTarget = meta.target;
   const progressPct = meta.next ? Math.min(100, Math.floor((spend / nextTarget) * 100)) : 100;
@@ -186,12 +200,29 @@ export default function MyLoyalty() {
       </div>
 
       {pendingChanged && (
-        <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 12, padding: '12px 16px', fontSize: 13, color: '#92400e', lineHeight: 1.55 }}>
-          {isEn
-            ? <>📣 From <b>{fmtDate(pendingPolicy.effectiveFrom)}</b>, {TIER_NAMES[currentTier]} benefits will be: {pendingRule.discount}% off court fees, {Number(pendingRule.multiplier).toFixed(1)}x points, book {pendingRule.advanceDays} days ahead, {pendingRule.changes} free reschedule(s)/month.</>
-            : <>📣 Từ <b>{fmtDate(pendingPolicy.effectiveFrom)}</b>, quyền lợi hạng {TIER_NAMES[currentTier]} là: giảm {String(pendingRule.discount).replace('.', ',')}% tiền sân, tích điểm {fmtMultiplier(pendingRule.multiplier)}, đặt trước {pendingRule.advanceDays} ngày, {pendingRule.changes} lần đổi lịch miễn phí/tháng.</>}
-          {' '}{pendingNextSpend != null && Number(pendingNextSpend) !== Number(meta.target) && <>{t('Ngưỡng lên hạng')} {TIER_NAMES[baseMeta.next]}: {money(pendingNextSpend)}. </>}
-          {t('Hạng hiện tại của bạn được giữ tới kỳ xét hạng.')}
+        <div style={{ background: '#fffbeb', border: '1px solid #fcd34d', borderRadius: 12, padding: '14px 16px', fontSize: 13, color: '#92400e', lineHeight: 1.55 }}>
+          <div style={{ fontWeight: 700, marginBottom: 8 }}>
+            📣 {isEn ? <>Tier policy changes from <b>{fmtDate(pendingPolicy.effectiveFrom)}</b></> : <>Thay đổi chính sách hạng áp dụng từ <b>{fmtDate(pendingPolicy.effectiveFrom)}</b></>}
+          </div>
+          {!policyDiff.some(x => x.code === currentTier) && (
+            <p style={{ margin: '0 0 8px' }}>{isEn ? `Your ${TIER_NAMES[currentTier]} benefits stay the same.` : `Quyền lợi hạng ${TIER_NAMES[currentTier]} của bạn không đổi.`}</p>
+          )}
+          <div style={{ display: 'grid', gap: 10, gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+            {policyDiff.map(x => (
+              <div key={x.code} style={{ background: '#fff', border: x.code === currentTier ? '2px solid #f59e0b' : '1px solid #fde68a', borderRadius: 10, padding: '10px 12px', color: '#78350f' }}>
+                <div style={{ fontWeight: 800, marginBottom: 6 }}>
+                  {TIER_NAMES[x.code]}{x.code === currentTier && <span style={{ marginLeft: 6, fontSize: 11, background: '#f59e0b', color: '#fff', borderRadius: 999, padding: '1px 8px' }}>{isEn ? 'Your tier' : 'Hạng của bạn'}</span>}
+                </div>
+                {x.rows.map(r => (
+                  <div key={r.label} style={{ display: 'flex', justifyContent: 'space-between', gap: 10, fontSize: 12.5, padding: '3px 0', borderTop: '1px dashed #fde68a' }}>
+                    <span>{r.label}</span>
+                    <span style={{ whiteSpace: 'nowrap' }}><s style={{ color: '#a8a29e' }}>{r.from}</s> → <b style={{ color: '#166534' }}>{r.to}</b></span>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+          <p style={{ margin: '8px 0 0', fontSize: 12 }}>{t('Hạng hiện tại của bạn được giữ tới kỳ xét hạng.')}</p>
         </div>
       )}
 

@@ -6,6 +6,7 @@ import {
   Sparkles,
   Bot,
   X,
+  Minus,
   ChevronDown,
   ExternalLink,
   CheckCircle2,
@@ -265,6 +266,9 @@ export default function AiChatbox() {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [closeHovered, setCloseHovered] = useState(false);
+  // Thu nhỏ: nút nổi chỉ còn bong bóng tròn để không che nội dung (nhớ theo trình duyệt)
+  const [mini, setMini] = useState(() => { try { return localStorage.getItem('courtly.aiMini') === '1'; } catch { return false; } });
+  const setMinimized = v => { setMini(v); try { localStorage.setItem('courtly.aiMini', v ? '1' : '0'); } catch { /* bỏ qua */ } };
   const chatEndRef = useRef(null);
 
   // Sync welcome message when language changes if conversation hasn't started yet
@@ -697,17 +701,44 @@ ${COURTLY_RULES_VI.replace('@@TIERS_VI@@', tierLinesVi())}`;
     <>
       {/* FLOATING TRIGGER BUTTON */}
       <aside aria-label={isEn ? 'Courtly AI Assistant' : 'Trợ lý AI Courtly'}>
-        {!open && (
+        {!open && mini && (
+          <button
+            type="button"
+            className="courtly-ai-fab courtly-ai-fab-mini"
+            onClick={() => setOpen(true)}
+            title={isEn ? 'Open Courtly AI Assistant' : 'Mở Trợ lý AI Courtly'}
+            aria-label={isEn ? 'Open Courtly AI Assistant' : 'Mở Trợ lý AI Courtly'}
+            style={{
+              position: 'fixed',
+              bottom: 20,
+              right: 20,
+              zIndex: 9990,
+              width: 48,
+              height: 48,
+              minHeight: 0,
+              padding: 0,
+              borderRadius: '50%',
+              background: '#173c32',
+              border: '2px solid #def46a',
+              boxShadow: '0 6px 18px rgba(23,60,50,0.35)',
+              display: 'grid',
+              placeItems: 'center',
+              fontSize: 22,
+              cursor: 'pointer'
+            }}
+          >
+            🎾
+            <span aria-hidden="true" style={{ position: 'absolute', top: 2, right: 2, width: 10, height: 10, borderRadius: '50%', background: '#4ade80', border: '2px solid #173c32' }} />
+          </button>
+        )}
+        {!open && !mini && (
+          <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9990 }}>
           <button
             type="button"
             className="courtly-ai-fab"
             onClick={() => setOpen(true)}
             aria-label={isEn ? 'Open Courtly AI Assistant' : 'Mở Trợ lý AI Courtly'}
             style={{
-              position: 'fixed',
-              bottom: 24,
-              right: 24,
-              zIndex: 9990,
               background: '#173c32',
               color: '#def46a',
               border: '2px solid #def46a',
@@ -738,6 +769,32 @@ ${COURTLY_RULES_VI.replace('@@TIERS_VI@@', tierLinesVi())}`;
               {isEn ? 'Online' : 'Trực tuyến'}
             </span>
           </button>
+          <button
+            type="button"
+            onClick={() => setMinimized(true)}
+            title={isEn ? 'Minimize' : 'Thu nhỏ'}
+            aria-label={isEn ? 'Minimize assistant button' : 'Thu nhỏ nút trợ lý'}
+            style={{
+              position: 'absolute',
+              top: -8,
+              left: -8,
+              width: 22,
+              height: 22,
+              minHeight: 0,
+              padding: 0,
+              borderRadius: '50%',
+              background: '#ffffff',
+              color: '#173c32',
+              border: '1px solid #cfd5c8',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.18)',
+              display: 'grid',
+              placeItems: 'center',
+              cursor: 'pointer'
+            }}
+          >
+            <Minus size={13} strokeWidth={2.6} />
+          </button>
+          </div>
         )}
       </aside>
 
@@ -809,10 +866,33 @@ ${COURTLY_RULES_VI.replace('@@TIERS_VI@@', tierLinesVi())}`;
               </div>
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={() => { setOpen(false); setMinimized(true); }}
+                title={isEn ? 'Minimize' : 'Thu nhỏ'}
+                aria-label={isEn ? 'Minimize assistant' : 'Thu nhỏ trợ lý'}
+                style={{
+                  background: 'transparent',
+                  color: 'rgba(255,255,255,0.85)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: 32,
+                  height: 32,
+                  minWidth: 32,
+                  minHeight: 32,
+                  padding: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer'
+                }}
+              >
+                <Minus size={18} strokeWidth={2.2} />
+              </button>
+              <button
+                type="button"
+                onClick={() => { setOpen(false); setMinimized(false); }}
                 title={isEn ? 'Close assistant' : 'Đóng trợ lý'}
                 aria-label={isEn ? 'Close assistant' : 'Đóng trợ lý'}
                 onMouseEnter={() => setCloseHovered(true)}

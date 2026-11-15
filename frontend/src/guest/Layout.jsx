@@ -406,7 +406,7 @@ export function CustomerNotifications() {
                             </b>
                             {isUnread && <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />}
                           </div>
-                          <p style={{ fontSize: 12, color: '#475569', margin: '3px 0 6px', lineHeight: 1.4 }}>
+                          <p style={{ fontSize: 12, color: '#475569', margin: '3px 0 6px', lineHeight: 1.4, whiteSpace: 'pre-line' }}>
                             {n.description}
                           </p>
                           {n.actionLabel && (

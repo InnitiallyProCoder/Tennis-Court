@@ -1789,7 +1789,7 @@ export function Orders({history=false}){
 
                     <div style={{width:'100%',fontSize:12,color:'#64748b',marginTop:4}}>
 
-                      * {t('Quy định đổi/hủy: Đổi trước giờ chơi và còn slot trống. Hủy trước > 24h hoàn 100% cọc, 12h-24h hoàn 50% cọc, dưới 12h giữ cọc.')}
+                      * {t('Quy định đổi/hủy: Đổi lịch trước giờ chơi 24h và còn slot trống. Tự hủy được tới trước giờ chơi: > 24h hoàn 100% cọc, 12h-24h hoàn 50% cọc, dưới 12h giữ cọc.')}
 
                     </div>
 
@@ -1921,6 +1921,8 @@ export function CancelDialog({order,onClose}){
 
   const [customReason,setCustomReason]=useState('');
 
+  const [accept,setAccept]=useState(false);
+
   const [id]=useState(requestId);
 
 
@@ -1942,6 +1944,9 @@ export function CancelDialog({order,onClose}){
 
 
   const finalReason = reason === 'Khác' ? (customReason.trim() || 'Lý do cá nhân') : reason;
+
+  // Hủy sát giờ: khách mất một phần / toàn bộ cọc nên phải tick xác nhận
+  const penalty = !!quote && Number(quote.refundPercent) < 100 && Number(quote.retainedAmount) > 0;
 
 
 
@@ -2073,6 +2078,26 @@ export function CancelDialog({order,onClose}){
 
 
 
+      {penalty && (
+
+        <label style={{display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 16, padding: '10px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, fontSize: 12.5, color: '#7f1d1d', lineHeight: 1.45, cursor: 'pointer'}}>
+
+          <input type="checkbox" checked={accept} onChange={e=>setAccept(e.target.checked)} style={{width: 18, height: 18, minHeight: 0, marginTop: 1, flexShrink: 0}}/>
+
+          <span>
+
+            {Number(quote.refundAmount) > 0
+
+              ? <>{t('Tôi hiểu đơn còn')} <b>{quote.hoursUntilMatch}h</b> {t('tới giờ chơi nên chỉ được hoàn')} <b>{money(quote.refundAmount)}</b>; {t('CLB giữ lại')} <b>{money(quote.retainedAmount)}</b>.</>
+
+              : <>{t('Tôi hiểu đơn còn')} <b>{quote.hoursUntilMatch}h</b> {t('tới giờ chơi nên')} <b>{t('không được hoàn cọc')}</b>; {t('CLB giữ lại')} <b>{money(quote.retainedAmount)}</b>.</>}
+
+          </span>
+
+        </label>
+
+      )}
+
       {error && (
 
         <div className="gx-error" role="alert" style={{marginBottom: 14, padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#991b1b', fontSize: 13}}>
@@ -2099,7 +2124,7 @@ export function CancelDialog({order,onClose}){
 
         <Action
 
-          disabled={busy || !quote || !!error}
+          disabled={busy || !quote || !!error || (penalty && !accept)}
 
           onClick={async()=>{
 
@@ -2107,7 +2132,7 @@ export function CancelDialog({order,onClose}){
 
             try{
 
-              await api(`/orders/${order.id}/cancel`,'POST',{requestId: id, reason: finalReason});
+              await api(`/orders/${order.id}/cancel`,'POST',{requestId: id, reason: finalReason, acceptPenalty: penalty ? accept : undefined});
 
               await refresh();
 

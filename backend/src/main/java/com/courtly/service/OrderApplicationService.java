@@ -116,6 +116,9 @@ public class OrderApplicationService {
         Set.of("HOLDING", "CONFIRMED").contains(o.getStatus()), "Chỉ thay đổi trước khi check-in");
     service.future(service.allocated(service.booking(o)));
     if ("HOLDING".equals(o.getStatus())) return;
+    // Khách được tự hủy tới trước giờ chơi; mức hoàn cọc (100% / 50% / 0%) do cancellationPreview quyết định.
+    // Mốc cấu hình chỉ còn áp cho đổi lịch.
+    if ("cancel".equals(action)) return;
     var p = docs.decode(settings.get().getPolicies());
     var configured = p.get(action + "CutoffMinutes");
     long cutoff = configured instanceof Number n ? n.longValue() : 1440;
@@ -249,6 +252,12 @@ public class OrderApplicationService {
               customerPolicy(a, o, "cancel");
               if (Set.of("ADMIN", "STAFF").contains(a.getRole())) text((String) b.get("reason"), "Lý do hủy");
               var settlement = new LinkedHashMap<>(cancellationPreview(id, a));
+              // Hủy sát giờ (không được hoàn đủ) phải có xác nhận rõ ràng của khách
+              if (!Set.of("ADMIN", "STAFF").contains(a.getRole())
+                  && ((Number) settlement.get("refundPercent")).intValue() < 100
+                  && ((java.math.BigDecimal) settlement.get("retainedAmount")).signum() > 0)
+                require(Boolean.TRUE.equals(b.get("acceptPenalty")),
+                    "Hủy dưới 24 giờ chỉ được hoàn " + settlement.get("refundPercent") + "% tiền cọc. Vui lòng xác nhận đồng ý trước khi hủy");
               if (Set.of("ADMIN", "STAFF").contains(a.getRole()) && Boolean.TRUE.equals(b.get("fullRefund"))) {
                 settlement.put("refundPercent", 100);
                 settlement.put("refundAmount", o.getPaidAmount());
