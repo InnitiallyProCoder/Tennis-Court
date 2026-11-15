@@ -366,7 +366,11 @@ export default function Payments(){
           </header>
           <p>{t(x.type)} • {money(x.amount)}</p>
           <p>{t('Đã xác nhận thu')}: {money(x.received)} • {t('Tiền cần đối soát')}: {money(x.reviewAmount)}</p>
-          <Action secondary onClick={()=>pay(null,null,null,x)}>{t('Xem mã QR thanh toán')}</Action>
+          <Action secondary onClick={()=>pay(null,null,null,x)}>
+            {x.status==='CONFIRMED'?`🧾 ${t('Xem biên lai')}`
+              :['PENDING','CHECKING'].includes(x.status)?t('Xem mã QR thanh toán')
+              :t('Xem chi tiết giao dịch')}
+          </Action>
         </article>)}
       </div>
       {!transfers.length&&<Empty/>}
