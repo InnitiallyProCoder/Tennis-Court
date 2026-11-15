@@ -87,3 +87,5 @@
 @media(max-width:600px){#courtly-balanced-amenities .gx-promise-grid{grid-template-columns:1fr}}
 
 #courtly-balanced-amenities .gx-receipt-actions{display:flex;gap:10px;justify-content:center;align-items:stretch;flex-wrap:wrap}#courtly-balanced-amenities .gx-receipt-actions>button{margin:0!important;min-height:46px;padding:10px 20px!important;display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:1 1 200px;line-height:1.2;box-sizing:border-box}
+#courtly-balanced-amenities .courtly-ai-collapse:hover,.courtly-ai-collapse:hover{color:#def46a!important;background:rgba(255,255,255,.08)!important}
+#courtly-balanced-amenities input[type=radio],#courtly-balanced-amenities input[type=checkbox]{display:inline-block;margin:0;width:18px;height:18px;min-height:0;padding:0;border:0;border-radius:0;background:none;flex:none;accent-color:#173c32}

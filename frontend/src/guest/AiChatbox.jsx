@@ -7,6 +7,7 @@ import {
   Bot,
   X,
   Minus,
+  ChevronRight,
   ChevronDown,
   ExternalLink,
   CheckCircle2,
@@ -732,68 +733,70 @@ ${COURTLY_RULES_VI.replace('@@TIERS_VI@@', tierLinesVi())}`;
           </button>
         )}
         {!open && !mini && (
-          <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 9990 }}>
-          <button
-            type="button"
-            className="courtly-ai-fab"
-            onClick={() => setOpen(true)}
-            aria-label={isEn ? 'Open Courtly AI Assistant' : 'Mở Trợ lý AI Courtly'}
+          <div
+            className="courtly-ai-pill"
             style={{
-              background: '#173c32',
-              color: '#def46a',
-              border: '2px solid #def46a',
-              borderRadius: 30,
-              padding: '10px 18px',
+              position: 'fixed',
+              bottom: 24,
+              right: 24,
+              zIndex: 9990,
               display: 'flex',
               alignItems: 'center',
-              gap: 8,
+              background: '#173c32',
+              border: '2px solid #def46a',
+              borderRadius: 30,
               boxShadow: '0 8px 24px rgba(23,60,50,0.35)',
-              cursor: 'pointer',
-              fontWeight: 700,
-              fontSize: 14,
-              transition: 'all 0.25s ease'
+              overflow: 'hidden'
             }}
           >
-            <span style={{ fontSize: 20 }}>🎾</span>
-            <span style={{ color: '#ffffff' }}>{isEn ? 'Courtly Assistant' : 'Trợ lý AI Courtly'}</span>
-            <span
+            <button
+              type="button"
+              className="courtly-ai-fab"
+              onClick={() => setOpen(true)}
+              aria-label={isEn ? 'Open Courtly AI Assistant' : 'Mở Trợ lý AI Courtly'}
               style={{
-                background: '#def46a',
-                color: '#173c32',
-                fontSize: 11,
-                padding: '2px 8px',
-                borderRadius: 10,
-                fontWeight: 800
+                background: 'transparent',
+                color: '#def46a',
+                border: 'none',
+                padding: '10px 10px 10px 18px',
+                minHeight: 0,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                cursor: 'pointer',
+                fontWeight: 700,
+                fontSize: 14
               }}
             >
-              {isEn ? 'Online' : 'Trực tuyến'}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setMinimized(true)}
-            title={isEn ? 'Minimize' : 'Thu nhỏ'}
-            aria-label={isEn ? 'Minimize assistant button' : 'Thu nhỏ nút trợ lý'}
-            style={{
-              position: 'absolute',
-              top: -8,
-              left: -8,
-              width: 22,
-              height: 22,
-              minHeight: 0,
-              padding: 0,
-              borderRadius: '50%',
-              background: '#ffffff',
-              color: '#173c32',
-              border: '1px solid #cfd5c8',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.18)',
-              display: 'grid',
-              placeItems: 'center',
-              cursor: 'pointer'
-            }}
-          >
-            <Minus size={13} strokeWidth={2.6} />
-          </button>
+              <span style={{ fontSize: 20 }}>🎾</span>
+              <span style={{ color: '#ffffff' }}>{isEn ? 'Courtly Assistant' : 'Trợ lý AI Courtly'}</span>
+              <span style={{ background: '#def46a', color: '#173c32', fontSize: 11, padding: '2px 8px', borderRadius: 10, fontWeight: 800 }}>
+                {isEn ? 'Online' : 'Trực tuyến'}
+              </span>
+            </button>
+            <button
+              type="button"
+              className="courtly-ai-collapse"
+              onClick={() => setMinimized(true)}
+              title={isEn ? 'Minimize' : 'Thu gọn'}
+              aria-label={isEn ? 'Minimize assistant button' : 'Thu gọn nút trợ lý'}
+              style={{
+                alignSelf: 'stretch',
+                width: 34,
+                minHeight: 0,
+                padding: 0,
+                marginRight: 4,
+                background: 'transparent',
+                color: 'rgba(255,255,255,0.6)',
+                border: 'none',
+                borderLeft: '1px solid rgba(222,244,106,0.25)',
+                display: 'grid',
+                placeItems: 'center',
+                cursor: 'pointer'
+              }}
+            >
+              <ChevronRight size={17} strokeWidth={2.4} />
+            </button>
           </div>
         )}
       </aside>
@@ -1093,8 +1096,15 @@ ${COURTLY_RULES_VI.replace('@@TIERS_VI@@', tierLinesVi())}`;
                 color: '#def46a',
                 border: 'none',
                 borderRadius: '50%',
-                width: 36,
-                height: 36,
+                width: 40,
+                height: 40,
+                minWidth: 40,
+                minHeight: 40,
+                padding: 0,
+                flex: '0 0 40px',
+                alignSelf: 'center',
+                aspectRatio: '1 / 1',
+                boxSizing: 'border-box',
                 display: 'grid',
                 placeItems: 'center',
                 cursor: !input.trim() || loading ? 'not-allowed' : 'pointer',
