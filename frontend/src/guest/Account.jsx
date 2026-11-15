@@ -1,4 +1,4 @@
-import React,{useState,useEffect,useMemo} from 'react';
+import React,{useState,useEffect,useMemo,useRef} from 'react';
 
 import QRCode from 'qrcode';
 
@@ -724,7 +724,7 @@ export function ExtendCourtDialog({order, onClose}) {
 
               onClose();
 
-              pay('ORDER', order.id, 'BALANCE');
+              pay('ORDER', order.id, 'BALANCE', undefined, {dialog: 'ticket'});
 
             }}
 
@@ -1080,7 +1080,7 @@ export function ExtendCourtDialog({order, onClose}) {
 
 export function Orders({history=false}){
 
-  const {t,data,pay,refresh,navigate,setMoveOrder,setDate,show,user,club,notify}=useGuest();
+  const {t,data,pay,refresh,navigate,setMoveOrder,setDate,show,user,club,notify,focusOrder,setFocusOrder}=useGuest();
 
   const [filter,setFilter]=useState(history ? 'HISTORY' : 'ALL'),[page,setPage]=useState(0);
 
@@ -1145,6 +1145,22 @@ export function Orders({history=false}){
     }).sort((a,b) => (b.createdAt || b.date).localeCompare(a.createdAt || a.date));
 
   }, [allOrders, filter, todayStr]);
+
+  // Sau khi thanh toán xong: đưa khách về đúng thẻ đơn vừa trả tiền thay vì đầu danh sách
+  const [flash,setFlash]=useState(null);
+  const lastFocus=useRef(null);
+  useEffect(()=>{
+    if(!focusOrder||lastFocus.current===focusOrder.at)return;
+    let idx=rows.findIndex(o=>o.id===focusOrder.id);
+    if(idx<0&&filter!=='ALL'){setFilter('ALL');return;}
+    if(idx<0)return;
+    lastFocus.current=focusOrder.at;
+    if(Math.floor(idx/12)!==page)setPage(Math.floor(idx/12));
+    setFlash(focusOrder.id);
+    const id=focusOrder.id;
+    setTimeout(()=>document.getElementById(`order-${id}`)?.scrollIntoView({behavior:'smooth',block:'start'}),80);
+    setTimeout(()=>{setFlash(f=>f===id?null:f);setFocusOrder?.(null);},3500);
+  },[focusOrder,rows,filter,page]);
 
 
 
@@ -1293,6 +1309,7 @@ export function Orders({history=false}){
       <div className="gx-records" style={{display:'grid',gap:18}}>
 
         {rows.slice(page*12,(page+1)*12).map(o=>{
+          const focused=flash===o.id;
 
           const sortedSlots=[...o.slots].sort((a,b)=>a.start.localeCompare(b.start));
 
@@ -1314,7 +1331,7 @@ export function Orders({history=false}){
 
           return (
 
-            <article key={o.id} style={{background:'#ffffff',borderRadius:12,border:'1.5px solid #dce4d6',padding:20,boxShadow:'0 2px 10px rgba(0,0,0,0.03)'}}>
+            <article key={o.id} id={`order-${o.id}`} style={{background:'#ffffff',borderRadius:12,border:focused?'2px solid #2e7d32':'1.5px solid #dce4d6',padding:20,boxShadow:focused?'0 0 0 4px rgba(46,125,50,.15)':'0 2px 10px rgba(0,0,0,0.03)',transition:'box-shadow .4s,border-color .4s',scrollMarginTop:90}}>
 
               {/* Card Header: Code + Date + State Badge */}
 

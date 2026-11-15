@@ -2,7 +2,7 @@ import GuestPortal from './guest/Portal';
 
 import React,{useState,useCallback,useRef,useEffect,useMemo} from 'react';
 
-import {CalendarDays,ClipboardList,Wallet,Grid2X2,Package,Users,Trophy,ChartColumn,Settings,Bell,Menu,PanelLeftClose,PanelLeftOpen,UserRound,LogOut,MessageSquare,Send,Ticket,Megaphone,Award} from 'lucide-react';
+import {CalendarDays,ClipboardList,Wallet,Grid2X2,Package,Users,Trophy,ChartColumn,Settings,Bell,Menu,X,PanelLeftClose,PanelLeftOpen,UserRound,LogOut,MessageSquare,Send,Ticket,Megaphone,Award} from 'lucide-react';
 
 import {CourtlyContext} from './context';
 
@@ -378,7 +378,7 @@ export function AuthenticatedApp({session,onAccessError,onLogout,pending,onConsu
 
  if(!isInternal)return <CourtlyContext.Provider value={{...club,user,isAdmin,isStaff,date,setDate,navigate,show:setDialog,notify}}><div className="customer-workspace"><PublicHeader user={user} onLogout={onLogout}/><main className="main">{club.error&&<div className="error" role="alert">{club.error} <Button onClick={()=>club.refresh().catch(()=>{})}>Thử lại</Button></div>}{club.loading?<div className="loading">Đang tải dữ liệu…</div>:club.data?(safeRoute.startsWith('profile')?<ProfilePage tab={safeRoute.split('-')[1]||'info'} initialPlan={membershipPlan}/>:<CustomerPage key={safeRoute} route={safeRoute}/>):<div className="empty">Không thể kết nối máy chủ. Vui lòng thử lại.</div>}</main><PublicFooter/>{club.data&&dialog&&<CustomerDialogs key={`${dialog.type}-${dialog.id||''}`} dialog={dialog} onClose={close}/>}<div aria-live="polite">{toast&&<div className="toast">{toast}</div>}</div></div></CourtlyContext.Provider>;
 
- return <CourtlyContext.Provider value={{...club,user,isAdmin,isStaff,date,setDate,navigate,show:setDialog,notify}}><div className={`layout ${navHidden?'nav-hidden':''}`}><aside className={`sidebar ${mobile?'open':''}`}><div className="brand"><img src="/favicon.svg" alt="" width="34" height="34"/><div>Courtly<em>TENNIS CLUB</em></div></div><nav className="nav" aria-label={isAdmin?'Quản trị':isStaff?'Staff':'Khách hàng'}>{menuGroups.map(group=><section className="nav-group" key={group.label}><div className="nav-caption">{group.label}</div>{group.ids.map(id=>{
+ return <CourtlyContext.Provider value={{...club,user,isAdmin,isStaff,date,setDate,navigate,show:setDialog,notify}}><div className={`layout ${navHidden?'nav-hidden':''}`}><aside className={`sidebar ${mobile?'open':''}`}><div className="brand"><img src="/favicon.svg" alt="" width="34" height="34"/><div>Courtly<em>TENNIS CLUB</em></div><button type="button" className="sidebar-close" aria-label={mobile?'Đóng menu':'Ẩn menu'} title={mobile?'Đóng menu':'Ẩn menu'} onClick={()=>{if(mobile||window.matchMedia('(max-width:760px)').matches){setMobile(false);return;}setNavHidden(true);try{localStorage.setItem('courtly.navHidden','1');}catch{}}}><X size={20}/></button></div><nav className="nav" aria-label={isAdmin?'Quản trị':isStaff?'Staff':'Khách hàng'}>{menuGroups.map(group=><section className="nav-group" key={group.label}><div className="nav-caption">{group.label}</div>{group.ids.map(id=>{
 
   const [,Icon,label]=menu.find(x=>x[0]===id);
 

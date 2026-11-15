@@ -131,6 +131,7 @@ export default function Portal({session,onSession,onLogout}){
         [loading,setLoading]=useState(true),
         [error,setError]=useState(''),
         [dialog,setDialog]=useState(null),
+        [focusOrder,setFocusOrder]=useState(null),
         [auth,setAuth]=useState(false),
         [authMode,setAuthMode]=useState('login'),
         [authContext,setAuthContext]=useState(null),
@@ -293,10 +294,27 @@ export default function Portal({session,onSession,onLogout}){
 
 // Auto-login on booking route removed (P2)
 
-  const pay=(type,targetId,purpose='DEPOSIT',existing)=>{
+  // returnTo: nơi đưa khách quay lại sau khi khoản chuyển được xác minh
+  //   {dialog:'ticket', orderId} → mở lại hộp thoại chi tiết đơn; mặc định với đơn: cuộn tới thẻ đơn trong Đơn của tôi
+  const pay=(type,targetId,purpose='DEPOSIT',existing,returnTo)=>{
     if(!user){login();return;}
-    if(existing){setDialog({kind:'payment',intent:existing});return;}
-    setDialog({kind:'payment-choice',type,targetId,purpose});
+    const kind=existing?.type||type,target=existing?.targetId||targetId;
+    const back=returnTo?{orderId:target,...returnTo}:(kind==='ORDER'&&target?{orderId:target}:null);
+    if(existing){setDialog({kind:'payment',intent:existing,returnTo:back});return;}
+    setDialog({kind:'payment-choice',type,targetId,purpose,returnTo:back});
+  };
+
+  const closeDialog=()=>{
+    const d=dialog;
+    setDialog(null);
+    if(d?.kind!=='payment'||!d.confirmed||!d.returnTo)return;
+    const r=d.returnTo;
+    if(r.dialog){
+      const order=(data?.orders||[]).find(o=>o.id===r.orderId);
+      if(order){setDialog({kind:r.dialog,order});return;}
+    }
+    if(route!=='orders'&&route!=='history')navigate('orders');
+    setFocusOrder({id:r.orderId,at:Date.now()});
   };
 
   const choosePayment=async method=>{
@@ -307,7 +325,7 @@ export default function Portal({session,onSession,onLogout}){
     }
     try{
       const x=await api('/transfers','POST',{type:dialog.type,targetId:dialog.targetId,purpose:dialog.purpose});
-      setDialog({kind:'payment',intent:x});
+      setDialog({kind:'payment',intent:x,returnTo:dialog.returnTo});
       refresh().catch(()=>{});
     }catch(e){
       notify(e.message);
@@ -325,7 +343,7 @@ export default function Portal({session,onSession,onLogout}){
     data,content,club:content.club||data?.club||{},
     transfers,refresh,notify,login,logout,
     preferredZone,setPreferredZone,moveOrder,setMoveOrder,
-    show:setDialog,pay,
+    show:setDialog,pay,focusOrder,setFocusOrder,
     activeVoucherCode,setActiveVoucherCode,
     showWelcomeBanner,setShowWelcomeBanner,
     welcomeBannerApplied,setWelcomeBannerApplied
@@ -415,7 +433,7 @@ export default function Portal({session,onSession,onLogout}){
         actions: (
           <button
             type="button"
-            onClick={() => setDialog({ kind: 'payment', order: overdueDebtOrder, intent: 'BALANCE' })}
+            onClick={() => pay('ORDER', overdueDebtOrder.id, 'BALANCE')}
             style={{
               background: '#fef08a',
               color: '#991b1b',
@@ -453,7 +471,7 @@ export default function Portal({session,onSession,onLogout}){
         actions: (
           <button
             type="button"
-            onClick={() => setDialog({ kind: 'payment', order: pendingPaymentOrder })}
+            onClick={() => pay('ORDER', pendingPaymentOrder.id, 'DEPOSIT')}
             style={{
               background: '#fef08a',
               color: '#7c2d12',
@@ -790,12 +808,13 @@ export default function Portal({session,onSession,onLogout}){
             />
           </Modal>
         ) : dialog && (
-          <Modal title={t('Đóng')} onClose={()=>setDialog(null)}>
+          <Modal title={t('Đóng')} onClose={closeDialog}>
             {dialog.kind==='ticket'?<TicketDialog order={dialog.order} onClose={()=>setDialog(null)}/>
             :dialog.kind==='zalo'?<ZaloZnsDialog order={dialog.order} onClose={()=>setDialog(null)}/>
             :dialog.kind==='extend'?<ExtendCourtDialog order={dialog.order} onClose={()=>setDialog(null)}/>
             :dialog.kind==='payment-choice'?<PaymentChoice onChoose={choosePayment}/>
-            :dialog.kind==='payment'?<PaymentDialog intent={dialog.intent} onClose={()=>setDialog(null)}/>
+            :dialog.kind==='payment'?<PaymentDialog intent={dialog.intent} returnTo={dialog.returnTo} onClose={closeDialog}
+              onConfirmed={()=>setDialog(d=>d&&d.kind==='payment'&&!d.confirmed?{...d,confirmed:true}:d)}/>
             :dialog.kind==='event'?<EventDialog event={dialog.event} onClose={()=>setDialog(null)}/>
             :dialog.kind==='article'?<Article article={dialog.article}/>
             :dialog.kind==='cancel'?<CancelDialog order={dialog.order} onClose={()=>setDialog(null)}/>

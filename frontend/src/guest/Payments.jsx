@@ -50,7 +50,7 @@ function PaymentCountdown({ expiresAt, t }) {
   );
 }
 
-export function PaymentDialog({intent,onClose}){
+export function PaymentDialog({intent,onClose,onConfirmed,returnTo}){
   const {t,refresh,notify,navigate,data,user,club}=useGuest();
   const lastStatus=useRef(intent.status);
   const [current,setCurrent]=useState(intent);
@@ -117,6 +117,7 @@ export function PaymentDialog({intent,onClose}){
   };
 
   const isConfirmed = current.status === 'CONFIRMED';
+  useEffect(()=>{if(isConfirmed)onConfirmed?.();},[isConfirmed]);
 
   if(isConfirmed){
     return (
@@ -143,10 +144,10 @@ export function PaymentDialog({intent,onClose}){
               <span>{t('Trạng thái giao dịch')}: <State value={current.status}/></span>
               <span>📧 {t('Biên lai đã gửi tới email và lưu trong Đơn của tôi')}</span>
             </div>
-            <div style={{display:'flex',gap:10,justifyContent:'center',flexWrap:'wrap'}}>
-              <PrintReceiptButton receipt={receipt} t={t} notify={notify} style={{padding:'12px 20px'}}/>
-        <Action onClick={()=>{onClose();if(navigate)navigate('orders');}}>
-          {t('Xem đơn hàng của tôi')} <ArrowRight size={16} style={{display:'inline',verticalAlign:'middle',marginLeft:4}}/>
+            <div className="gx-receipt-actions">
+              <PrintReceiptButton receipt={receipt} t={t} notify={notify}/>
+        <Action onClick={()=>{if(returnTo)onClose();else{onClose();if(navigate)navigate('orders');}}}>
+          {t(returnTo?.dialog?'Quay lại chi tiết đơn':'Xem đơn hàng của tôi')} <ArrowRight size={16}/>
         </Action>
             </div>
           </>;

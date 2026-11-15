@@ -180,16 +180,25 @@ export function CustomerNotifications() {
     serverNotifs.forEach(sn => {
       if (!list.some(item => item.id === sn.id)) {
         const fullText = `${sn.type || ''} ${sn.subject || ''} ${sn.body || ''}`.toLowerCase();
-        const isVoucher = /voucher|ưu đãi|tri ân|xin lỗi|chào mừng|nâng hạng|sinh nhật|gift|reward/i.test(fullText);
+        const type = sn.type || '';
+        // Điều hướng theo loại thông báo trước, chỉ đoán theo nội dung khi loại không rõ
+        const isLoyalty = /^(LOYALTY_|TIER_|POINTS_)/.test(type);
+        const isVoucher = /VOUCHER|GIFT|REWARD/.test(type) || (!type && /voucher|ưu đãi|tri ân|xin lỗi|chào mừng|sinh nhật|gift|reward/i.test(fullText));
+        const target = isLoyalty ? 'loyalty'
+          : isVoucher ? 'vouchers'
+          : type === 'PAYMENT_RECEIPT' || type === 'REFUND_DONE' ? 'payments'
+          : type === 'FEEDBACK_REPLY' ? 'feedback'
+          : 'orders';
+        const label = { loyalty: t('Xem hạng & điểm'), vouchers: t('Xem ưu đãi'), payments: t('Xem thanh toán'), feedback: t('Xem phản hồi') }[target] || t('Xem');
         list.push({
           id: sn.id,
           type: sn.type,
-          icon: isVoucher ? '🎁' : sn.type?.includes('REMINDER') ? '🎾' : sn.type?.includes('DEBT') ? '⚠️' : '🔔',
+          icon: isLoyalty ? '🏅' : isVoucher ? '🎁' : sn.type?.includes('REMINDER') ? '🎾' : sn.type?.includes('DEBT') ? '⚠️' : '🔔',
           title: sn.subject || t('Thông báo từ Courtly'),
           description: sn.body,
           date: sn.createdAt ? new Date(sn.createdAt).toLocaleDateString('vi-VN') : '',
-          actionLabel: isVoucher ? t('Xem ưu đãi') : t('Xem'),
-          action: () => isVoucher ? navigate('vouchers') : navigate('orders'),
+          actionLabel: label,
+          action: () => navigate(target),
           urgent: sn.type?.includes('DEBT') || sn.type?.includes('EXPIRING')
         });
       }

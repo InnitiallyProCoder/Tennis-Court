@@ -85,3 +85,5 @@
 #courtly-balanced-amenities .gx-promise-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
 @media(max-width:1024px){#courtly-balanced-amenities .gx-promise-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:600px){#courtly-balanced-amenities .gx-promise-grid{grid-template-columns:1fr}}
+
+#courtly-balanced-amenities .gx-receipt-actions{display:flex;gap:10px;justify-content:center;align-items:stretch;flex-wrap:wrap}#courtly-balanced-amenities .gx-receipt-actions>button{margin:0!important;min-height:46px;padding:10px 20px!important;display:inline-flex;align-items:center;justify-content:center;gap:6px;flex:1 1 200px;line-height:1.2;box-sizing:border-box}

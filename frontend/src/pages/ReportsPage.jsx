@@ -19,7 +19,7 @@ import { money, labels, today, localDate, slotHours } from '../utils/format';
 
 export default function ReportsPage() {
 
-  const { data } = useCourtly();
+  const { data, show } = useCourtly();
 
   const currentToday = today(); // YYYY-MM-DD
 
@@ -1607,7 +1607,7 @@ export default function ReportsPage() {
 
       <Panel title={`Danh sách đơn hàng trong kỳ (${ordersInPeriod.length} đơn)`}>
 
-        <Table headings={['Mã đơn', 'Khách hàng', 'Ngày chơi trong kỳ', 'Trạng thái đơn', 'Tổng cả đơn', 'Đã thu cả đơn']} empty={!ordersInPeriod.length}>
+        <Table headings={['Mã đơn', 'Khách hàng', 'Ngày chơi trong kỳ', 'Trạng thái đơn', 'Tổng cả đơn', 'Đã thu cả đơn', '']} empty={!ordersInPeriod.length}>
 
           {ordersInPeriod.slice(0, 15).map(o => (
 
@@ -1630,6 +1630,8 @@ export default function ReportsPage() {
               <td>{money(o.total)}</td>
 
               <td className="name">{money(o.paid)}</td>
+
+              <td><Button className="sm" onClick={() => show({ type: 'order', id: o.id })}>Chi tiết</Button></td>
 
             </tr>
 
