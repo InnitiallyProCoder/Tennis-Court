@@ -79,7 +79,7 @@ export function AuthenticatedApp({session,onAccessError,onLogout,pending,onConsu
 
  const [dialog,setDialog]=useState(null),[mobile,setMobile]=useState(false),[navHidden,setNavHidden]=useState(()=>{try{return localStorage.getItem('courtly.navHidden')==='1';}catch{return false;}}),[toast,setToast]=useState('');const toastTimer=useRef();
 
- const club=useClub(date,onAccessError),user=club.data?.viewer||session.user,isAdmin=user.role==='ADMIN',isStaff=user.role==='STAFF',isInternal=isAdmin||isStaff,menu=isAdmin?adminMenu:isStaff?staffMenu:customerMenu;
+ const club=useClub(date,onAccessError,['ADMIN','STAFF'].includes(session.user.role)?10000:30000),user=club.data?.viewer||session.user,isAdmin=user.role==='ADMIN',isStaff=user.role==='STAFF',isInternal=isAdmin||isStaff,menu=isAdmin?adminMenu:isStaff?staffMenu:customerMenu;
 
  const mappedRoute=!isInternal&&['orders','history','payments'].includes(route)?'profile-'+route:route;const safeRoute=mappedRoute.startsWith('profile')||menu.some(x=>x[0]===mappedRoute)||(isAdmin&&mappedRoute==='notifications')?mappedRoute:(isInternal?'operations':'calendar');
 
@@ -87,25 +87,83 @@ export function AuthenticatedApp({session,onAccessError,onLogout,pending,onConsu
 
  useEffect(()=>()=>clearTimeout(toastTimer.current),[]);
 
- // Manager: đếm voucher / chiến dịch Staff gửi lên đang chờ duyệt để hiện chấm đỏ và báo khi có yêu cầu mới.
- const [approvals,setApprovals]=useState({vouchers:0,campaigns:0});const approvalsSeen=useRef(null);
+ // Dữ liệu không nằm trong /overview: voucher, chiến dịch, feedback, thông báo đã gửi. Tải định kỳ cho menu nội bộ.
+ const [side,setSide]=useState({vouchers:null,campaigns:null,feedback:null,notifications:null});const approvalsSeen=useRef(null);
+ const approvals=useMemo(()=>({vouchers:(side.vouchers||[]).filter(x=>x.status==='PENDING_APPROVAL').length,campaigns:(side.campaigns||[]).filter(x=>x.status==='PENDING_APPROVAL').length}),[side.vouchers,side.campaigns]);
+ useEffect(()=>{
+  if(!isInternal)return;
+  let alive=true;
+  const list=x=>Array.isArray(x)?x:Array.isArray(x?.items)?x.items:Array.isArray(x?.content)?x.content:null;
+  const load=async()=>{
+   if(document.hidden)return;
+   const [v,c,ct,n]=await Promise.all([
+    api('/admin/vouchers').catch(()=>null),
+    api('/admin/campaigns').catch(()=>null),
+    isAdmin?api('/content').catch(()=>null):Promise.resolve(null),
+    api('/admin/notifications?page=0&size=50').catch(()=>null)
+   ]);
+   if(!alive)return;
+   setSide({vouchers:list(v),campaigns:list(c),feedback:list(ct?.feedback),notifications:list(n)});
+  };
+  load();const timer=setInterval(load,15000);
+  window.addEventListener('courtly-approvals-changed',load);window.addEventListener('focus',load);
+  return()=>{alive=false;clearInterval(timer);window.removeEventListener('courtly-approvals-changed',load);window.removeEventListener('focus',load);};
+ },[isInternal,isAdmin]);
  useEffect(()=>{
   if(!isAdmin)return;
-  let alive=true;
-  const load=async()=>{
-   try{
-    const [v,c]=await Promise.all([api('/admin/vouchers?status=PENDING_APPROVAL').catch(()=>[]),api('/admin/campaigns').catch(()=>[])]);
-    if(!alive)return;
-    const next={vouchers:(v||[]).filter(x=>x.status==='PENDING_APPROVAL').length,campaigns:(c||[]).filter(x=>x.status==='PENDING_APPROVAL').length};
-    const prev=approvalsSeen.current;
-    if(prev&&(next.vouchers>prev.vouchers||next.campaigns>prev.campaigns))notify(next.vouchers>prev.vouchers?`Có voucher mới chờ Manager duyệt (${next.vouchers}).`:`Có chiến dịch mới chờ Manager duyệt (${next.campaigns}).`);
-    approvalsSeen.current=next;setApprovals(next);
-   }catch{}
+  const prev=approvalsSeen.current,next=approvals;
+  if(prev&&(next.vouchers>prev.vouchers||next.campaigns>prev.campaigns))notify(next.vouchers>prev.vouchers?`Có voucher mới chờ Manager duyệt (${next.vouchers}).`:`Có chiến dịch mới chờ Manager duyệt (${next.campaigns}).`);
+  if(side.vouchers||side.campaigns)approvalsSeen.current=next;
+ },[approvals,isAdmin,notify,side.vouchers,side.campaigns]);
+
+ // "Chấm cập nhật mới": mỗi mục menu có dấu vân tay dữ liệu; khác với lần cuối người dùng mở mục đó thì hiện chấm.
+ const fingerprints=useMemo(()=>{
+  const d=club.data;if(!d||!isInternal)return {};
+  const h=v=>{const t=JSON.stringify(v);let x=5381;for(let i=0;i<t.length;i++)x=((x<<5)+x+t.charCodeAt(i))|0;return String(x>>>0);};
+  const pick=(arr,...keys)=>(Array.isArray(arr)?arr:[]).map(o=>keys.map(k=>o?.[k]??null));
+  const orders=pick(d.orders,'id','status','paid','total','date');
+  const fp={
+   operations:h(orders),orders:h(orders),history:h(orders),
+   calendar:h([orders,pick(d.staffSchedules,'id','status','date')]),
+   payments:h([pick(d.payments,'id','status','amount'),pick(d.refunds,'id','status','amount')]),
+   'payment-history':h([pick(d.payments,'id','status'),pick(d.refunds,'id','status'),pick(d.membershipPayments,'id','status')]),
+   services:h([pick(d.matches,'id','status','referee'),d.refereeRates||null]),
+   courts:h([pick(d.courts,'id','status','name'),d.prices||null,pick(d.archivedCourts,'id')]),
+   staff:h([pick(d.staff,'id','status','role'),pick(d.staffSchedules,'id','status','date')]),
+   tournaments:h([pick(d.tournaments,'id','status'),pick(d.registrations,'id','status'),pick(d.matches,'id','status','score')]),
+   accounts:h(pick(d.accounts,'id','status','role')),
+   loyalty:h(pick(d.accounts,'id','tier','pointsBalance')),
+   system:h(d.settings||null)
   };
-  load();const timer=setInterval(load,30000);
-  window.addEventListener('courtly-approvals-changed',load);
-  return()=>{alive=false;clearInterval(timer);window.removeEventListener('courtly-approvals-changed',load);};
- },[isAdmin,notify]);
+  if(side.vouchers)fp.vouchers=h(pick(side.vouchers,'id','status','usedCount'));
+  if(side.campaigns)fp.campaigns=h(pick(side.campaigns,'id','status'));
+  if(side.feedback)fp.content=h(pick(side.feedback,'id','status','reply','published'));
+  if(side.notifications)fp['sent-notifications']=h(pick(side.notifications,'id','status'));
+  return fp;
+ },[club.data,side,isInternal]);
+ const seenKey=`courtly.seen.${session.user.id||session.user.email||'me'}`;
+ const [seen,setSeen]=useState(()=>{try{return JSON.parse(localStorage.getItem(seenKey)||'{}');}catch{return {};}});
+ const fpRef=useRef(fingerprints);fpRef.current=fingerprints;
+ const markSeen=useCallback(ids=>{setSeen(prev=>{let changed=false;const next={...prev};for(const id of ids){const v=fpRef.current[id];if(v&&next[id]!==v){next[id]=v;changed=true;}}if(!changed)return prev;try{localStorage.setItem(seenKey,JSON.stringify(next));}catch{}return next;});},[seenKey]);
+ // Lần đầu thấy một mục: lấy làm mốc (không bật chấm cho mọi thứ khi mới đăng nhập)
+ useEffect(()=>{const fresh=Object.keys(fingerprints).filter(id=>seen[id]==null);if(fresh.length)markSeen(fresh);},[fingerprints,seen,markSeen]);
+ // Đang mở mục nào thì coi như đã xem mục đó
+ useEffect(()=>{markSeen([route]);},[route,fingerprints,markSeen]);
+ // Thao tác của chính mình: không báo chấm, không báo đơn mới
+ const selfMutating=useRef(0);
+ useEffect(()=>{const self=()=>{selfMutating.current=Date.now();setTimeout(()=>markSeen(Object.keys(fpRef.current)),0);};window.addEventListener('courtly-self-mutation',self);return()=>window.removeEventListener('courtly-self-mutation',self);},[markSeen]);
+ const unseen=useMemo(()=>{const u={};for(const [id,v] of Object.entries(fingerprints))if(seen[id]!=null&&seen[id]!==v)u[id]=true;return u;},[fingerprints,seen]);
+
+ // Báo ngay khi có đơn mới từ khách / quầy khác
+ const knownOrders=useRef(null);
+ useEffect(()=>{
+  const list=club.data?.orders;if(!list||!isInternal)return;
+  if(knownOrders.current&&Date.now()-selfMutating.current>5000){
+   const fresh=list.filter(o=>!knownOrders.current.has(o.id));
+   if(fresh.length)notify(fresh.length===1?`🆕 Đơn mới #${fresh[0].id.slice(0,8).toUpperCase()} – ${fresh[0].name||'khách'}`:`🆕 Có ${fresh.length} đơn mới`);
+  }
+  knownOrders.current=new Set(list.map(o=>o.id));
+ },[club.data,isInternal,notify]);
 
  useEffect(()=>{setDialog(null);},[user.role]);
 
@@ -287,7 +345,7 @@ export function AuthenticatedApp({session,onAccessError,onLogout,pending,onConsu
 
 
 
-   const feedbackList = club.data.content?.feedback || [];
+   const feedbackList = side.feedback || [];
 
    const lowRatingCount = feedbackList.filter(f => (f.rating <= 3 || f.lowRating) && f.handlingStatus !== 'RESOLVED' && f.handlingStatus !== 'NO_ACTION').length;
    const pendingFeedback = feedbackList.filter(f => !f.reply && !f.published).length + lowRatingCount;
@@ -320,7 +378,7 @@ export function AuthenticatedApp({session,onAccessError,onLogout,pending,onConsu
 
    };
 
- }, [club.data, approvals]);
+ }, [club.data, approvals, side.feedback]);
 
 
 
@@ -414,9 +472,11 @@ export function AuthenticatedApp({session,onAccessError,onLogout,pending,onConsu
 
           <Icon size={19}/>
 
-          {badge > 0 && (
+          {(badge > 0 || unseen[id]) && (
 
             <span
+
+              title={unseen[id] ? 'Có cập nhật mới' : undefined}
 
               style={{
 
@@ -432,11 +492,11 @@ export function AuthenticatedApp({session,onAccessError,onLogout,pending,onConsu
 
                 borderRadius: '50%',
 
-                background: badgeColor,
+                background: badge > 0 ? badgeColor : '#4ade80',
 
                 border: '1.5px solid #173c32',
 
-                boxShadow: `0 0 6px ${badgeColor}`
+                boxShadow: `0 0 6px ${badge > 0 ? badgeColor : '#4ade80'}`
 
               }}
 
